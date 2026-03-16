@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ゴースト // GHOST_PROTOCOL</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#03030a;cursor:crosshair;font-family:'Courier New',monospace}
+canvas#c{position:fixed;top:0;left:0;width:100%;height:100%;z-index:1}
+
+.scan{
+  position:fixed;inset:0;z-index:10;pointer-events:none;
+  background:repeating-linear-gradient(0deg,transparent 0px,transparent 2px,rgba(0,0,0,0.12) 2px,rgba(0,0,0,0.12) 4px);
+  animation:flk .08s steps(4) infinite;
+}
+@keyframes flk{0%{opacity:.9}25%{opacity:.97}50%{opacity:.92}75%{opacity:.98}100%{opacity:.94}}
+
+.crt{
+  position:fixed;inset:-4%;z-index:11;pointer-events:none;
+  border-radius:8%/5%;
+  background:radial-gradient(ellipse at 50% 50%,transparent 50%,rgba(0,0,0,.7) 100%);
+  box-shadow:inset 0 0 150px rgba(0,0,0,.6),inset 0 0 60px rgba(0,0,0,.3);
+}
+
+.ttl{
+  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  z-index:15;pointer-events:none;text-align:center;
+  opacity:0;animation:ttlIn 2s ease 0.4s forwards;
+}
+.ttl h1{
+  font-size:clamp(30px,7vw,88px);font-weight:200;letter-spacing:.35em;
+  color:transparent;-webkit-text-stroke:1px rgba(0,255,213,.5);
+  text-shadow:0 0 40px rgba(0,255,213,.15),5px 0 rgba(255,0,102,.22),-5px 0 rgba(0,160,255,.22);
+  animation:cab 2.5s ease-in-out infinite;
+}
+.ttl .sub{
+  font-size:clamp(8px,1.1vw,12px);font-weight:300;
+  color:rgba(255,0,102,.4);letter-spacing:.6em;margin-top:14px;
+}
+@keyframes ttlIn{0%{opacity:0;filter:blur(14px)}40%{opacity:.7;filter:blur(0)}100%{opacity:.5}}
+@keyframes cab{
+  0%,100%{text-shadow:0 0 40px rgba(0,255,213,.15),5px 0 rgba(255,0,102,.22),-5px 0 rgba(0,160,255,.22)}
+  50%{text-shadow:0 0 60px rgba(0,255,213,.25),-6px 3px rgba(255,0,102,.3),6px -3px rgba(0,160,255,.3)}
+}
+
+.hud{position:fixed;font-size:10px;line-height:1.7;color:rgba(0,255,213,.25);z-index:12;pointer-events:none;letter-spacing:1px}
+.h0{top:18px;left:18px}.h1{top:18px;right:18px;text-align:right}
+.h2{bottom:18px;left:18px}.h3{bottom:18px;right:18px;text-align:right}
+
+.df{
+  position:fixed;font-size:11px;z-index:5;pointer-events:none;white-space:nowrap;
+  color:rgba(0,255,213,.09);animation:dfu var(--d,10s) linear forwards;
+}
+.df.m{color:rgba(255,0,102,.07)}
+@keyframes dfu{
+  0%{transform:translateY(0);opacity:0}
+  3%{opacity:var(--a,.09)}97%{opacity:var(--a,.09)}
+  100%{transform:translateY(calc(-100vh - 60px));opacity:0}
+}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="scan"></div>
+<div class="crt"></div>
+<div class="ttl"><h1>ゴースト</h1><div class="sub">GHOST_PROTOCOL v2.077</div></div>
+<div class="hud h0" id="h0"></div>
+<div class="hud h1" id="h1"></div>
+<div class="hud h2" id="h2"></div>
+<div class="hud h3" id="h3"></div>
+
+<script>
+// ═══════════════════════════════════════════
+//  G H O S T _ P R O T O C O L  //  A P E X
+// ═══════════════════════════════════════════
+
+const c = document.getElementById('c');
+const $ = c.getContext('2d');
+let W, H;
+
+// ── Character Sets (must be before resize/initRain) ──
+const KT = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲンガギグゲゴザジズゼゾ';
+const HX = '0123456789ABCDEF';
+const SYM = '░▒▓█│┤╣║╗╝┐└┴┬├─┼╠═╬';
+const ALL = KT + HX + HX + '0101' + SYM;
+const rch = () => ALL[(Math.random() * ALL.length) | 0];
+
+// ── Digital Rain ── FAST
+const FS = 14;
+let cols, rainY, rainSpd, rainBri;
+const ROWS = 200;
+const charG = [];
+for (let i = 0; i < 300; i++) {
+  charG[i] = [];
+  for (let j = 0; j < ROWS; j++) charG[i][j] = rch();
+}
+
+// ── Pulse System — gives everything a heartbeat ──
+let pulse = 0;
+let pulseDir = 1;
+let pulseSpeed = 0.04;
+let pulseBeat = 0;
+
+function updatePulse(t) {
+  pulse += pulseDir * pulseSpeed;
+  if (pulse > 1) { pulse = 1; pulseDir = -1; }
+  if (pulse < 0) { pulse = 0; pulseDir = 1; pulseSpeed = 0.03 + Math.random() * 0.04; }
+  pulseBeat = Math.sin(t * 0.008) * 0.5 + 0.5;
+}
+
+// ── Screen Shake ──
+let shakeX = 0, shakeY = 0, shakeMag = 0;
+function triggerShake(mag) { shakeMag = Math.max(shakeMag, mag); }
+function updateShake() {
+  if (shakeMag > 0.3) {
+    shakeX = (Math.random() - 0.5) * shakeMag;
+    shakeY = (Math.random() - 0.5) * shakeMag;
+    shakeMag *= 0.88;
+  } else {
+    shakeX = shakeY = shakeMag = 0;
+  }
+  c.style.transform = `translate(${shakeX}px,${shakeY}px)`;
+}
+
+function resize() {
+  W = c.width = innerWidth;
+  H = c.height = innerHeight;
+  initRain();
+}
+addEventListener('resize', resize);
+resize();
+
+// ── Mouse ──
+let mx = W / 2, my = H / 2;
+const trail = [];
+addEventListener('mousemove', e => {
+  mx = e.clientX; my = e.clientY;
+  trail.push({ x: mx, y: my, t: performance.now() });
+  if (trail.length > 50) trail.shift();
+});
+
+function initRain() {
+  cols = Math.ceil(W / FS) + 1;
+  rainY = new Float32Array(cols);
+  rainSpd = new Float32Array(cols);
+  rainBri = new Float32Array(cols);
+  for (let i = 0; i < cols; i++) {
+    rainY[i] = Math.random() * -50;
+    rainSpd[i] = 0.6 + Math.random() * 1.4;
+    rainBri[i] = 0.2 + Math.random() * 0.6;
+  }
+}
+
+function drawRain(t) {
+  // Faster fade = snappier trails
+  $.fillStyle = 'rgba(3,3,10,0.13)';
+  $.fillRect(0, 0, W, H);
+  $.font = FS + 'px monospace';
+
+  for (let i = 0; i < cols; i++) {
+    const x = i * FS;
+    const row = rainY[i] | 0;
+    const ci = i % 300;
+
+    // Rapid character mutation
+    if (Math.random() < 0.04) charG[ci][(Math.random() * ROWS) | 0] = rch();
+
+    if (row >= 0 && row < ROWS) {
+      $.shadowBlur = 16;
+      $.shadowColor = '#0fD';
+      $.fillStyle = `rgba(200,255,245,${rainBri[i]})`;
+      $.fillText(charG[ci][row], x, row * FS);
+      $.shadowBlur = 0;
+
+      const tLen = 8 + ((Math.random() * 8) | 0);
+      for (let j = 1; j < tLen; j++) {
+        const tr = row - j;
+        if (tr < 0 || tr >= ROWS) continue;
+        const a = rainBri[i] * (1 - j / tLen) * 0.55;
+        if (a < 0.01) break;
+        $.fillStyle = Math.random() < 0.04
+          ? `rgba(255,0,102,${a * 0.5})`
+          : `rgba(0,255,213,${a})`;
+        $.fillText(charG[ci][tr], x, tr * FS);
+      }
+    }
+
+    rainY[i] += rainSpd[i];
+    if (rainY[i] * FS > H + 150) {
+      rainY[i] = Math.random() * -15;
+      rainSpd[i] = 0.6 + Math.random() * 1.4;
+      rainBri[i] = 0.2 + Math.random() * 0.6;
+    }
+    // Frequent surges
+    if (Math.random() < 0.002) { rainBri[i] = 1; rainSpd[i] = 3.5 + Math.random() * 2; }
+  }
+}
+
+// ── Wireframe Face Mesh ──
+const GW = 44, GH = 34;
+
+function faceZ(nx, ny, t) {
+  const r = Math.sqrt(nx * nx * 1.4 + ny * ny * 0.8);
+  if (r > 1) return 0;
+  let d = Math.cos(r * Math.PI * 0.5);
+  d *= d;
+
+  for (const ex of [-0.28, 0.28]) {
+    const er = Math.sqrt((nx - ex) ** 2 * 2.5 + (ny + 0.18) ** 2 * 3.5);
+    if (er < 0.32) d -= 0.38 * Math.max(0, Math.cos(er / 0.32 * Math.PI * 0.5));
+  }
+  if (ny < -0.02 && ny > -0.28 && Math.abs(nx) < 0.58) {
+    const b = Math.cos(nx / 0.58 * Math.PI * 0.5) * Math.cos((ny + 0.15) / 0.13 * Math.PI * 0.5);
+    if (b > 0) d += b * 0.1;
+  }
+  if (Math.abs(nx) < 0.07 && ny > -0.08 && ny < 0.28) {
+    d += 0.13 * Math.cos(nx / 0.07 * Math.PI * 0.5) * Math.sin((ny + 0.08) / 0.36 * Math.PI);
+  }
+  for (const nnx of [-0.055, 0.055]) {
+    const nr = Math.sqrt((nx - nnx) ** 2 + (ny - 0.24) ** 2);
+    if (nr < 0.05) d -= 0.1 * Math.cos(nr / 0.05 * Math.PI * 0.5);
+  }
+  if (Math.abs(nx) < 0.2 && Math.abs(ny - 0.4) < 0.035) {
+    d -= 0.09 * Math.cos(nx / 0.2 * Math.PI * 0.5) * Math.cos((ny - 0.4) / 0.035 * Math.PI * 0.5);
+  }
+  for (const cx of [-0.42, 0.42]) {
+    const cr = Math.sqrt((nx - cx) ** 2 + (ny - 0.04) ** 2);
+    if (cr < 0.2) d += 0.07 * Math.cos(cr / 0.2 * Math.PI * 0.5);
+  }
+  {
+    const cr2 = Math.sqrt(nx * nx * 2 + (ny - 0.52) ** 2);
+    if (cr2 < 0.14) d += 0.045 * Math.cos(cr2 / 0.14 * Math.PI * 0.5);
+  }
+  for (const tx of [-0.5, 0.5]) {
+    const tr = Math.sqrt((nx - tx) ** 2 * 2 + (ny + 0.08) ** 2);
+    if (tr < 0.15) d -= 0.04 * Math.cos(tr / 0.15 * Math.PI * 0.5);
+  }
+
+  // Fast aggressive breathing
+  d *= 0.85 + Math.sin(t * 0.003) * 0.15 + pulseBeat * 0.08;
+  return Math.max(0, d);
+}
+
+let mGlitch = 0, mGlitchT = 0;
+
+function drawMesh(t) {
+  const cell = Math.min(W / GW, H / GH) * 1.15;
+  const fR = Math.min(W, H) * 0.3;
+  const emergence = Math.min(1, t / 1500); // FAST emergence
+  const maxD = 120 * emergence;
+
+  // Aggressive mouse-following + faster oscillation
+  const mxN = (mx - W / 2) / W;
+  const myN = (my - H / 2) / H;
+  const rotY = Math.sin(t * 0.0004) * 0.3 + mxN * 0.35;
+  const rotX = Math.sin(t * 0.00028) * 0.12 - 0.04 + myN * 0.2;
+  const cRY = Math.cos(rotY), sRY = Math.sin(rotY);
+  const cRX = Math.cos(rotX), sRX = Math.sin(rotX);
+
+  // More frequent, harder glitches
+  mGlitchT--;
+  if (Math.random() < 0.025) {
+    mGlitch = (Math.random() - 0.5) * 80;
+    mGlitchT = 2 + (Math.random() * 6) | 0;
+    if (Math.random() < 0.3) triggerShake(6);
+  }
+  if (mGlitchT <= 0) mGlitch *= 0.75;
+
+  const fov = 500;
+  const pts = new Array((GW + 1) * (GH + 1));
+  for (let gx = 0; gx <= GW; gx++) {
+    for (let gy = 0; gy <= GH; gy++) {
+      let bx = (gx - GW / 2) * cell;
+      let by = (gy - GH / 2) * cell;
+      const nx = bx / fR;
+      const ny = by / fR;
+      let z = faceZ(nx, ny, t) * maxD;
+
+      if (mGlitch && Math.sin(by * 0.06 + t * 0.012) > 0.3) bx += mGlitch;
+
+      const x1 = bx * cRY - z * sRY;
+      const z1 = bx * sRY + z * cRY;
+      const y1 = by * cRX - z1 * sRX;
+      const z2 = by * sRX + z1 * cRX;
+      const d = fov + z2;
+      if (d < 40) { pts[gx * (GH + 1) + gy] = null; continue; }
+      const s = fov / d;
+      pts[gx * (GH + 1) + gy] = { x: x1 * s + W / 2, y: y1 * s + H / 2, z };
+    }
+  }
+
+  const batches = [
+    { lw: 0.3, edges: [] },
+    { lw: 0.6, edges: [] },
+    { lw: 1.0, edges: [] },
+    { lw: 1.5, edges: [] },
+  ];
+  const magEdges = [];
+
+  for (let gx = 0; gx <= GW; gx++) {
+    for (let gy = 0; gy <= GH; gy++) {
+      const idx = gx * (GH + 1) + gy;
+      const p = pts[idx];
+      if (!p) continue;
+      const neighbors = [];
+      if (gx < GW) neighbors.push(pts[(gx + 1) * (GH + 1) + gy]);
+      if (gy < GH) neighbors.push(pts[idx + 1]);
+      for (const q of neighbors) {
+        if (!q) continue;
+        const avgZ = (p.z + q.z) / 2;
+        const zN = Math.min(1, avgZ / 55);
+        if (Math.random() < 0.01) { magEdges.push(p.x, p.y, q.x, q.y); continue; }
+        const bi = zN < 0.02 ? 0 : zN < 0.12 ? 1 : zN < 0.35 ? 2 : 3;
+        batches[bi].edges.push(p.x, p.y, q.x, q.y);
+      }
+    }
+  }
+
+  $.save();
+  $.globalAlpha = 0.65 * emergence;
+
+  const alphas = [0.03, 0.1, 0.28, 0.55];
+  for (let bi = 0; bi < 4; bi++) {
+    const b = batches[bi];
+    if (!b.edges.length) continue;
+    $.beginPath();
+    $.strokeStyle = `rgba(0,255,213,${alphas[bi]})`;
+    $.lineWidth = b.lw;
+    for (let i = 0; i < b.edges.length; i += 4) {
+      $.moveTo(b.edges[i], b.edges[i + 1]);
+      $.lineTo(b.edges[i + 2], b.edges[i + 3]);
+    }
+    $.stroke();
+  }
+
+  if (batches[3].edges.length) {
+    $.beginPath();
+    $.strokeStyle = 'rgba(0,255,213,0.15)';
+    $.lineWidth = 3;
+    $.shadowBlur = 8;
+    $.shadowColor = 'rgba(0,255,213,0.35)';
+    for (let i = 0; i < batches[3].edges.length; i += 4) {
+      $.moveTo(batches[3].edges[i], batches[3].edges[i + 1]);
+      $.lineTo(batches[3].edges[i + 2], batches[3].edges[i + 3]);
+    }
+    $.stroke();
+    $.shadowBlur = 0;
+  }
+
+  if (magEdges.length) {
+    $.beginPath();
+    $.strokeStyle = 'rgba(255,0,102,0.35)';
+    $.lineWidth = 1.2;
+    for (let i = 0; i < magEdges.length; i += 4) {
+      $.moveTo(magEdges[i], magEdges[i + 1]);
+      $.lineTo(magEdges[i + 2], magEdges[i + 3]);
+    }
+    $.stroke();
+  }
+
+  // Pulsing eye glow — more intense
+  const eyeBri = Math.max(0, Math.min(1, 0.4 + Math.sin(t * 0.006) * 0.2 + pulseBeat * 0.15));
+  for (const enx of [-0.28, 0.28]) {
+    const eny = -0.18;
+    const ebx = enx * fR, eby = eny * fR;
+    const ez = faceZ(enx, eny, t) * maxD;
+    const ex1 = ebx * cRY - ez * sRY;
+    const ez1 = ebx * sRY + ez * cRY;
+    const ey1 = eby * cRX - ez1 * sRX;
+    const ez2 = eby * sRX + ez1 * cRX;
+    const d = fov + ez2;
+    if (d < 40) continue;
+    const s = fov / d;
+    const epx = ex1 * s + W / 2, epy = ey1 * s + H / 2;
+    const r = Math.max(1, 35 * emergence * s);
+
+    $.globalAlpha = 1;
+    const gr = $.createRadialGradient(epx, epy, 0, epx, epy, r);
+    gr.addColorStop(0, `rgba(255,0,102,${(eyeBri * emergence).toFixed(3)})`);
+    gr.addColorStop(0.3, `rgba(255,0,102,${(eyeBri * 0.35 * emergence).toFixed(3)})`);
+    gr.addColorStop(1, 'rgba(255,0,102,0)');
+    $.fillStyle = gr;
+    $.fillRect(epx - r, epy - r, r * 2, r * 2);
+  }
+  $.restore();
+}
+
+// ── Mouse Trail — snappier ──
+function drawTrail(t) {
+  if (trail.length < 2) return;
+  $.save();
+  $.globalCompositeOperation = 'screen';
+  $.lineWidth = 1.5;
+  for (let i = 1; i < trail.length; i++) {
+    const age = t - trail[i].t;
+    if (age > 500) continue;
+    const a = 0.35 * (1 - age / 500);
+    $.beginPath();
+    $.moveTo(trail[i - 1].x, trail[i - 1].y);
+    $.lineTo(trail[i].x, trail[i].y);
+    $.strokeStyle = `rgba(0,255,213,${a})`;
+    $.stroke();
+  }
+  $.restore();
+  while (trail.length && t - trail[0].t > 500) trail.shift();
+}
+
+// ── Glitch Effects — AGGRESSIVE ──
+function glitch(t) {
+  if (Math.random() > 0.18) return;
+  const n = 2 + ((Math.random() * 8) | 0);
+  for (let i = 0; i < n; i++) {
+    const y = (Math.random() * H) | 0;
+    const h = Math.max(1, (2 + Math.random() * 12) | 0);
+    const shift = ((Math.random() - 0.5) * 60) | 0;
+    if (y + h > H || y < 0) continue;
+    try {
+      const img = $.getImageData(0, y, W, h);
+      $.putImageData(img, shift, y);
+    } catch (e) {}
+  }
+  // Horizontal scan tears — more frequent
+  if (Math.random() < 0.5) {
+    $.save();
+    $.globalCompositeOperation = 'screen';
+    const tearCount = 1 + ((Math.random() * 3) | 0);
+    for (let i = 0; i < tearCount; i++) {
+      $.fillStyle = Math.random() < 0.3
+        ? `rgba(255,0,102,${0.04 + Math.random() * 0.08})`
+        : `rgba(0,255,213,${0.04 + Math.random() * 0.08})`;
+      $.fillRect(0, Math.random() * H, W, 1 + Math.random() * 3);
+    }
+    $.restore();
+  }
+}
+
+// Heavy glitch burst — way more frequent + screen shake
+let heavyUntil = 0;
+setInterval(() => {
+  if (Math.random() < 0.45) {
+    heavyUntil = performance.now() + 100 + Math.random() * 300;
+    triggerShake(10 + Math.random() * 8);
+  }
+}, 1800);
+
+function heavyGlitch(t) {
+  if (t < heavyUntil) {
+    const n = 10 + ((Math.random() * 18) | 0);
+    for (let i = 0; i < n; i++) {
+      const y = (Math.random() * H) | 0;
+      const h = Math.max(1, (4 + Math.random() * 30) | 0);
+      const shift = ((Math.random() - 0.5) * 120) | 0;
+      if (y + h > H || y < 0) continue;
+      try {
+        const img = $.getImageData(0, y, W, h);
+        $.putImageData(img, shift, y);
+      } catch (e) {}
+    }
+    // Harder chromatic aberration
+    $.save();
+    $.globalCompositeOperation = 'screen';
+    $.globalAlpha = 0.07;
+    $.drawImage(c, 6, 0);
+    $.fillStyle = 'rgba(255,0,102,0.035)';
+    $.fillRect(0, 0, W, H);
+    $.globalAlpha = 0.05;
+    $.drawImage(c, -6, 0);
+    $.fillStyle = 'rgba(0,160,255,0.025)';
+    $.fillRect(0, 0, W, H);
+    $.restore();
+  }
+}
+
+// ── Persistent Chromatic Aberration — subtle constant ──
+function chromaShift() {
+  if (Math.random() > 0.12) return;
+  $.save();
+  $.globalCompositeOperation = 'screen';
+  $.globalAlpha = 0.015 + pulseBeat * 0.01;
+  $.drawImage(c, 2, 0);
+  $.globalAlpha = 0.01 + pulseBeat * 0.008;
+  $.drawImage(c, -2, 0);
+  $.restore();
+}
+
+// ── Noise Overlay ──
+const nc = document.createElement('canvas');
+nc.width = 128; nc.height = 128;
+nc.style.cssText = 'position:fixed;top:-50%;left:-50%;width:200%;height:200%;z-index:9;pointer-events:none;opacity:0.04;mix-blend-mode:overlay';
+document.body.appendChild(nc);
+const n$ = nc.getContext('2d');
+const nImg = n$.createImageData(128, 128);
+
+function noise() {
+  const d = nImg.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const v = Math.random() * 255;
+    d[i] = d[i + 1] = d[i + 2] = v;
+    d[i + 3] = 255;
+  }
+  n$.putImageData(nImg, 0, 0);
+  nc.style.transform = `translate(${(Math.random() * 10) | 0}px,${(Math.random() * 10) | 0}px)`;
+}
+
+// ── HUD — rapid updates ──
+function hud(t) {
+  const hx = () => ((Math.random() * 0xFFFFFF) | 0).toString(16).padStart(6, '0').toUpperCase();
+  const ts = new Date().toISOString().replace('T', ' ').slice(0, -5);
+  document.getElementById('h0').innerHTML =
+    `SECTION_9 // MEGATOKYO<br>NET_DEPTH: ${(Math.sin(t * .003) * 50 + 50).toFixed(1)}m<br>SIGNAL: ${(()=>{const n=(Math.random()*6)|0;return '█'.repeat(n)+'░'.repeat(6-n)})()}  ${(60 + Math.random() * 30) | 0}%`;
+  document.getElementById('h1').innerHTML =
+    `${ts}<br>GHOST: <span style="color:rgba(255,0,102,.45)">ACTIVE</span><br>0x${hx()}`;
+  document.getElementById('h2').innerHTML =
+    `BARRIER: ${Math.random()<0.1?'<span style="color:rgba(255,0,102,.5)">BREACH</span>':'INTACT'}<br>SYNC: ${(90 + Math.random() * 10).toFixed(1)}%<br>MEM: ${(4 + Math.random() * 8).toFixed(1)}TB`;
+  document.getElementById('h3').innerHTML =
+    `ゴースト・イン・ザ・シェル<br>PROTOCOL: 2501<br>LAYER_${(Math.random() * 9) | 0}`;
+}
+
+// ── Floating Data Fragments — faster, more ──
+function spawnFrag() {
+  const el = document.createElement('div');
+  el.className = 'df' + (Math.random() < 0.2 ? ' m' : '');
+  el.style.left = (Math.random() * 100) + '%';
+  el.style.top = (100 + Math.random() * 10) + '%';
+  el.style.setProperty('--d', (5 + Math.random() * 10) + 's');
+  el.style.setProperty('--a', (0.05 + Math.random() * 0.1).toFixed(3));
+  const types = [
+    () => { let s = ''; for (let i = 0; i < 8; i++) s += HX[(Math.random() * 16) | 0]; return s },
+    () => { let s = ''; for (let i = 0; i < 5; i++) s += KT[(Math.random() * KT.length) | 0]; return s },
+    () => '0x' + ((Math.random() * 0xFFFFFFFF) | 0).toString(16).toUpperCase(),
+    () => 'GHOST://' + ((Math.random() * 0xFFFF) | 0).toString(16),
+    () => Array.from({ length: 10 }, () => '01'[(Math.random() * 2) | 0]).join(' '),
+  ];
+  el.textContent = types[(Math.random() * types.length) | 0]();
+  document.body.appendChild(el);
+  el.addEventListener('animationend', () => el.remove());
+}
+for (let i = 0; i < 18; i++) setTimeout(spawnFrag, Math.random() * 3000);
+setInterval(spawnFrag, 700);
+
+// ── Data Stream Lines — FAST ──
+const streams = [];
+function spawnStream() {
+  if (streams.length > 6) return;
+  const len = 30 + (Math.random() * 60) | 0;
+  let txt = '';
+  for (let i = 0; i < len; i++) txt += rch();
+  streams.push({
+    txt, y: (Math.random() * H) | 0, x: -300,
+    spd: 16 + Math.random() * 28,
+    alpha: 0.1 + Math.random() * 0.15
+  });
+}
+
+function drawStreams(t) {
+  $.save();
+  $.font = '12px monospace';
+  for (let i = streams.length - 1; i >= 0; i--) {
+    const s = streams[i];
+    s.x += s.spd;
+    if (s.x > W + 300) { streams.splice(i, 1); continue; }
+    const progress = s.x / (W + 600);
+    const a = s.alpha * Math.sin(progress * Math.PI);
+    $.fillStyle = Math.random() < 0.15
+      ? `rgba(255,0,102,${a * 0.6})`
+      : `rgba(0,255,213,${a})`;
+    $.fillText(s.txt, s.x, s.y);
+  }
+  $.restore();
+}
+
+// ── Ambient Particles — more, faster ──
+const PCOUNT = 120;
+const particles = [];
+for (let i = 0; i < PCOUNT; i++) {
+  particles.push({
+    x: Math.random() * 2000,
+    y: Math.random() * 1200,
+    vx: (Math.random() - 0.5) * 0.8,
+    vy: -0.5 - Math.random() * 1.2,
+    size: 0.5 + Math.random() * 2,
+    alpha: 0.03 + Math.random() * 0.08
+  });
+}
+
+function drawParticles() {
+  for (const p of particles) {
+    p.x += p.vx;
+    p.y += p.vy;
+    if (p.y < -10) { p.y = H + 10; p.x = Math.random() * W; }
+    if (p.x < -10) p.x = W + 10;
+    if (p.x > W + 10) p.x = -10;
+    $.fillStyle = `rgba(0,255,213,${p.alpha})`;
+    $.fillRect(p.x, p.y, p.size, p.size);
+  }
+}
+
+// ── Scan Beam — sweeps across screen periodically ──
+let scanBeamY = -100;
+let scanBeamActive = false;
+let scanBeamSpeed = 0;
+
+setInterval(() => {
+  if (!scanBeamActive && Math.random() < 0.5) {
+    scanBeamActive = true;
+    scanBeamY = -20;
+    scanBeamSpeed = 6 + Math.random() * 10;
+  }
+}, 2500);
+
+function drawScanBeam() {
+  if (!scanBeamActive) return;
+  scanBeamY += scanBeamSpeed;
+  if (scanBeamY > H + 50) { scanBeamActive = false; return; }
+
+  $.save();
+  $.globalCompositeOperation = 'screen';
+  const grad = $.createLinearGradient(0, scanBeamY - 40, 0, scanBeamY + 40);
+  grad.addColorStop(0, 'rgba(0,255,213,0)');
+  grad.addColorStop(0.4, 'rgba(0,255,213,0.06)');
+  grad.addColorStop(0.5, 'rgba(0,255,213,0.12)');
+  grad.addColorStop(0.6, 'rgba(0,255,213,0.06)');
+  grad.addColorStop(1, 'rgba(0,255,213,0)');
+  $.fillStyle = grad;
+  $.fillRect(0, scanBeamY - 40, W, 80);
+  $.restore();
+}
+
+// ── Main Loop ──
+let lastHud = 0, lastNoise = 0;
+
+function frame(t) {
+  updatePulse(t);
+  updateShake();
+
+  drawRain(t);
+  drawMesh(t);
+  drawStreams(t);
+  drawParticles();
+  drawScanBeam();
+  drawTrail(t);
+  chromaShift();
+  glitch(t);
+  heavyGlitch(t);
+
+  // Frequent stream spawns
+  if (Math.random() < 0.025) spawnStream();
+
+  if (t - lastNoise > 40) { noise(); lastNoise = t; }
+  if (t - lastHud > 180) { hud(t); lastHud = t; }
+
+  // Screen flashes — more frequent
+  if (Math.random() < 0.003) {
+    $.fillStyle = `rgba(0,255,213,${0.02 + Math.random() * 0.03})`;
+    $.fillRect(0, 0, W, H);
+    triggerShake(4);
+  }
+  if (Math.random() < 0.0015) {
+    $.fillStyle = `rgba(255,0,102,${0.02 + Math.random() * 0.025})`;
+    $.fillRect(0, 0, W, H);
+  }
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
